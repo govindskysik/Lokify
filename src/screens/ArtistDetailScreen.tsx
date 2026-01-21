@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, FlatList, Modal, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/colors';
 import { Song } from '../types';
@@ -19,10 +19,14 @@ const ArtistDetailScreen = () => {
   const [albums, setAlbums] = useState<Set<string>>(new Set());
   const [totalDuration, setTotalDuration] = useState(0);
   const [showAllSongs, setShowAllSongs] = useState(false);
+  const [selectedSong, setSelectedSong] = useState<Song | null>(null);
+  const [showMenu, setShowMenu] = useState(false);
   
   const setQueue = usePlayerStore((state) => state.setQueue);
   const setCurrentTrackIndex = usePlayerStore((state) => state.setCurrentTrackIndex);
   const setIsPlaying = usePlayerStore((state) => state.setIsPlaying);
+  const addToQueue = usePlayerStore((state) => state.addToQueue);
+  const addToQueueNext = usePlayerStore((state) => state.addToQueueNext);
   const setShowMiniPlayer = usePlayerStore((state) => state.setShowMiniPlayer);
   const setShowExpandedPlayer = usePlayerStore((state) => state.setShowExpandedPlayer);
 
@@ -132,14 +136,96 @@ const ArtistDetailScreen = () => {
       >
         <Ionicons name="play" size={18} color="#fff" />
       </TouchableOpacity>
-      <TouchableOpacity style={styles.menuButton}>
+      <TouchableOpacity style={styles.menuButton} onPress={() => handleMenuPress(item)}>
         <Ionicons name="ellipsis-vertical" size={20} color={colors.text} />
       </TouchableOpacity>
     </View>
   );
 
+  const handleMenuPress = (song: Song) => {
+    setSelectedSong(song);
+    setShowMenu(true);
+  };
+
+  const handleMenuOption = (option: string) => {
+    if (!selectedSong) return;
+
+    switch (option) {
+      case 'Play Next':
+        addToQueueNext(selectedSong);
+        Alert.alert('Added to Queue', `"${selectedSong.name}" will play next`);
+        break;
+      case 'Add to Playing Queue':
+        addToQueue(selectedSong);
+        Alert.alert('Added to Queue', `"${selectedSong.name}" added to queue`);
+        break;
+      case 'Add to Favorites':
+        addToFavorites(selectedSong);
+        Alert.alert('Added to Favorites', `"${selectedSong.name}" added to favorites`);
+        break;
+      case 'Remove from Favorites':
+        removeFromFavorites(selectedSong.id);
+        Alert.alert('Removed from Favorites', `"${selectedSong.name}" removed from favorites`);
+        break;
+      case 'Go to Album':
+        setShowMenu(false);
+        navigation.navigate('AlbumDetail', { 
+          albumId: selectedSong.album?.id,
+          albumName: selectedSong.album?.name,
+        });
+        break;
+    }
+
+    setShowMenu(false);
+  };
+
+  const renderMenuModal = () => (
+    <Modal
+      visible={showMenu}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowMenu(false)}
+    >
+      <TouchableOpacity
+        style={styles.menuOverlay}
+        onPress={() => setShowMenu(false)}
+        activeOpacity={1}
+      >
+        <View style={[styles.menuContent, { backgroundColor: colors.background }]}>
+          {['Play Next', 'Add to Playing Queue', selectedSong && isFavorite(selectedSong.id) ? 'Remove from Favorites' : 'Add to Favorites', 'Go to Album'].map((option) => (
+            <TouchableOpacity
+              key={option}
+              style={styles.menuItem}
+              onPress={() => handleMenuOption(option)}
+            >
+              <Ionicons
+                name={
+                  option === 'Play Next' 
+                    ? 'play-skip-forward' 
+                    : option === 'Add to Playing Queue'
+                    ? 'list'
+                    : option === 'Remove from Favorites'
+                    ? 'heart'
+                    : option === 'Add to Favorites'
+                    ? 'heart-outline'
+                    : 'disc'
+                }
+                size={24}
+                color={colors.primary}
+              />
+              <Text style={[styles.menuItemText, { color: colors.text }]}>
+                {option}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {renderMenuModal()}
       {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.background }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerButton}>
@@ -395,6 +481,28 @@ const styles = StyleSheet.create({
     height: 36,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  menuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  menuContent: {
+    borderRadius: 12,
+    paddingVertical: 12,
+    minWidth: 200,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  menuItemText: {
+    marginLeft: 16,
+    fontSize: 16,
+    fontWeight: '500',
   },
   emptyText: {
     textAlign: 'center',

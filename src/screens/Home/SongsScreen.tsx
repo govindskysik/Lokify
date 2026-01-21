@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, memo } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, Modal, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../theme/colors';
@@ -71,12 +71,16 @@ const SongsScreen = () => {
   const setIsPlaying = usePlayerStore((state) => state.setIsPlaying);
   const setShowMiniPlayer = usePlayerStore((state) => state.setShowMiniPlayer);
   const setShowExpandedPlayer = usePlayerStore((state) => state.setShowExpandedPlayer);
+  const addToQueue = usePlayerStore((state) => state.addToQueue);
+  const addToQueueNext = usePlayerStore((state) => state.addToQueueNext);
+  const addToFavorites = usePlayerStore((state) => state.addToFavorites);
+  const removeFromFavorites = usePlayerStore((state) => state.removeFromFavorites);
+  const isFavorite = usePlayerStore((state) => state.isFavorite);
   const [songs, setSongs] = useState<Song[]>([]);
   const [filteredSongs, setFilteredSongs] = useState<Song[]>([]);
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [showFilterMenu, setShowFilterMenu] = useState(false);
-  const [isFavorite, setIsFavorite] = useState(false);
   const [filter, setFilter] = useState<'popular' | 'artist' | 'album' | 'year' | 'asc' | 'desc'>('popular');
   
   const queries = [
@@ -219,7 +223,7 @@ const SongsScreen = () => {
   const menuOptions = [
     { label: 'Play Next', icon: 'play-skip-forward' },
     { label: 'Add to Playing Queue', icon: 'list' },
-    { label: 'Add to Playlist', icon: 'heart' },
+    { label: selectedSong && isFavorite(selectedSong.id) ? 'Remove from Favorites' : 'Add to Favorites', icon: selectedSong && isFavorite(selectedSong.id) ? 'heart' : 'heart-outline' },
     { label: 'Go to Album', icon: 'disc' },
     { label: 'Go to Artist', icon: 'person' },
     { label: 'Details', icon: 'information-circle' },
@@ -230,19 +234,34 @@ const SongsScreen = () => {
 
     switch (option) {
       case 'Play Next':
-        console.log('Play Next:', selectedSong.name);
+        addToQueueNext(selectedSong);
+        Alert.alert('Added to Queue', `"${selectedSong.name}" will play next`);
         break;
       case 'Add to Playing Queue':
-        console.log('Add to Queue:', selectedSong.name);
+        addToQueue(selectedSong);
+        Alert.alert('Added to Queue', `"${selectedSong.name}" added to queue`);
         break;
-      case 'Add to Playlist':
-        console.log('Add to Playlist:', selectedSong.name);
+      case 'Add to Favorites':
+        addToFavorites(selectedSong);
+        Alert.alert('Added to Favorites', `"${selectedSong.name}" added to favorites`);
+        break;
+      case 'Remove from Favorites':
+        removeFromFavorites(selectedSong.id);
+        Alert.alert('Removed from Favorites', `"${selectedSong.name}" removed from favorites`);
         break;
       case 'Go to Album':
-        console.log('Go to Album:', selectedSong.album?.name);
+        setShowMenu(false);
+        navigation.navigate('AlbumDetail', { 
+          albumId: selectedSong.album?.id,
+          albumName: selectedSong.album?.name,
+        });
         break;
       case 'Go to Artist':
-        console.log('Go to Artist:', selectedSong.artists?.primary?.[0]?.name);
+        setShowMenu(false);
+        navigation.navigate('ArtistDetail', { 
+          artistId: selectedSong.artists?.primary?.[0]?.id,
+          artistName: selectedSong.artists?.primary?.[0]?.name,
+        });
         break;
       case 'Details':
         console.log('Show Details:', selectedSong);
@@ -285,10 +304,16 @@ const SongsScreen = () => {
               </View>
               <TouchableOpacity
                 style={styles.likeButton}
-                onPress={() => setIsFavorite(!isFavorite)}
+                onPress={() => {
+                  if (isFavorite(selectedSong.id)) {
+                    removeFromFavorites(selectedSong.id);
+                  } else {
+                    addToFavorites(selectedSong);
+                  }
+                }}
               >
                 <Ionicons
-                  name={isFavorite ? "heart" : "heart-outline"}
+                  name={isFavorite(selectedSong.id) ? "heart" : "heart-outline"}
                   size={28}
                   color={colors.primary}
                 />

@@ -4,6 +4,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/colors';
 import FavoritesScreen from '../screens/FavoritesScreen';
+import DownloadsScreen from '../screens/DownloadsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import HomeScreen from '../screens/HomeScreen';
 import ArtistDetailScreen from '../screens/ArtistDetailScreen';
@@ -12,6 +13,7 @@ import AlbumDetailScreen from '../screens/AlbumDetailScreen';
 export type BottomTabsParamList = {
     HomeTab: undefined;
     Favorites: undefined;
+    Downloads: undefined;
     Settings: undefined;
 };
 
@@ -80,6 +82,8 @@ const BottomTabs = () => {
                         iconName = focused ? 'home' : 'home-outline';
                     } else if (route.name === 'Favorites') {
                         iconName = focused ? 'heart' : 'heart-outline';
+                    } else if (route.name === 'Downloads') {
+                        iconName = focused ? 'download' : 'download-outline';
                     } else if (route.name === 'Settings') {
                         iconName = focused ? 'settings' : 'settings-outline';
                     }
@@ -106,6 +110,13 @@ const BottomTabs = () => {
                 component={FavoritesScreen}
                 options={{
                     tabBarLabel: 'Favorites',
+                }}
+            />
+            <Tab.Screen
+                name="Downloads"
+                component={DownloadsScreen}
+                options={{
+                    tabBarLabel: 'Downloads',
                 }}
             />
             <Tab.Screen

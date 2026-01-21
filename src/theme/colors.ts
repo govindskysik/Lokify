@@ -9,6 +9,7 @@ export interface ColorScheme {
   tabBarBackground: string;
   cardBackground: string;
   border: string;
+  error: string;
 }
 
 const LIGHT_COLORS: ColorScheme = {
@@ -19,6 +20,7 @@ const LIGHT_COLORS: ColorScheme = {
   tabBarBackground: '#FFFFFF',
   cardBackground: '#F5F5F5',
   border: '#E0E0E0',
+  error: '#FF3B30',
 };
 
 const DARK_COLORS: ColorScheme = {
@@ -29,6 +31,7 @@ const DARK_COLORS: ColorScheme = {
   tabBarBackground: '#1A1A1A',
   cardBackground: '#1E1E1E',
   border: '#2A2A2A',
+  error: '#FF6B6B',
 };
 
 export const useTheme = (): ColorScheme => {

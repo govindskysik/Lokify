@@ -1,5 +1,6 @@
 import { Audio } from 'expo-av';
 import { Song } from '../types';
+import { getLocalPath } from './downloadService';
 
 let sound: Audio.Sound | null = null;
 let soundPosition = 0;
@@ -29,11 +30,21 @@ export const setupPlayer = async () => {
 
 export const loadTrack = async (song: Song) => {
   try {
-    // Get the best quality download URL
-    const url = song.downloadUrl?.[song.downloadUrl.length - 1]?.url || '';
-    if (!url) {
-      console.error('No download URL available for song:', song.name);
-      return false;
+    // First check if song is downloaded locally
+    const localPath = await getLocalPath(song.id);
+    let url: string;
+    
+    if (localPath) {
+      console.log('Playing from local file:', localPath);
+      url = localPath;
+    } else {
+      // Get the best quality download URL for streaming
+      url = song.downloadUrl?.[song.downloadUrl.length - 1]?.url || '';
+      if (!url) {
+        console.error('No download URL available for song:', song.name);
+        return false;
+      }
+      console.log('Streaming from URL:', url);
     }
 
     // Stop and unload previous sound if exists

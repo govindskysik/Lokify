@@ -19,6 +19,7 @@ import { useTheme } from '../theme/colors';
 import { usePlayerStore } from '../store/playerStore';
 import { pauseTrack, resumeTrack, getCurrentPosition, getDuration, getIsPlaying, loadTrack, playTrack, seekTo, setOnTrackFinish } from '../services/musicPlayerService';
 import { getSongLyrics } from '../api/search';
+import { downloadSong, deleteSong } from '../services/downloadService';
 
 const { height: screenHeight } = Dimensions.get('window');
 
@@ -29,7 +30,27 @@ interface ExpandedPlayerProps {
 
 const ExpandedPlayer = ({ isExpanded, onCollapse }: ExpandedPlayerProps) => {
   const colors = useTheme();
-  const { queue, currentTrackIndex, isPlaying, setIsPlaying, setCurrentTrackIndex } = usePlayerStore();
+  const {
+    queue,
+    currentTrackIndex,
+    isPlaying,
+    setIsPlaying,
+    setCurrentTrackIndex,
+    setShowMiniPlayer,
+    favorites,
+    addToFavorites,
+    removeFromFavorites,
+    isFavorite,
+    isShuffle,
+    setIsShuffle,
+    shuffleQueue,
+    downloadedSongs,
+    downloadProgress,
+    setDownloadProgress,
+    addDownloadedSong,
+    removeDownloadedSong,
+    isDownloaded,
+  } = usePlayerStore();
   const [currentTrack, setCurrentTrack] = useState<any>(null);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -38,6 +59,8 @@ const ExpandedPlayer = ({ isExpanded, onCollapse }: ExpandedPlayerProps) => {
   const [showLyrics, setShowLyrics] = useState(false);
   const [lyrics, setLyrics] = useState<string | null>(null);
   const [loadingLyrics, setLoadingLyrics] = useState(false);
+  const [showQueueModal, setShowQueueModal] = useState(false);
+  const [showMenuModal, setShowMenuModal] = useState(false);
   const updateInterval = useRef<NodeJS.Timeout | null>(null);
   const slideAnim = useRef(new Animated.Value(screenHeight)).current;
   const panResponder = useRef(
@@ -178,6 +201,16 @@ const ExpandedPlayer = ({ isExpanded, onCollapse }: ExpandedPlayerProps) => {
     setPosition(newPosition);
   };
 
+  const handleToggleFavorite = () => {
+    if (!currentTrack) return;
+    
+    if (isFavorite(currentTrack.id)) {
+      removeFromFavorites(currentTrack.id);
+    } else {
+      addToFavorites(currentTrack);
+    }
+  };
+
   const handleSkipNext = async () => {
     try {
       // Prevent multiple concurrent loads
@@ -204,6 +237,40 @@ const ExpandedPlayer = ({ isExpanded, onCollapse }: ExpandedPlayerProps) => {
       console.error('Error skipping to next track:', error);
       setIsLoading(false);
       setIsPlaying(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!currentTrack) return;
+    
+    try {
+      const downloaded = isDownloaded(currentTrack.id);
+      
+      if (downloaded) {
+        // Delete the song
+        await deleteSong(currentTrack.id);
+        removeDownloadedSong(currentTrack.id);
+        console.log('Deleted song:', currentTrack.name);
+      } else {
+        // Download the song
+        console.log('Starting download:', currentTrack.name);
+        const localPath = await downloadSong(currentTrack, (progress) => {
+          setDownloadProgress(currentTrack.id, progress);
+        });
+        
+        addDownloadedSong({
+          id: currentTrack.id,
+          localPath,
+          downloadedAt: Date.now(),
+          song: currentTrack,
+        });
+        
+        console.log('Downloaded song:', currentTrack.name);
+        setDownloadProgress(currentTrack.id, 1);
+      }
+    } catch (error) {
+      console.error('Error handling download:', error);
+      setDownloadProgress(currentTrack.id, 0);
     }
   };
 
@@ -243,6 +310,39 @@ const ExpandedPlayer = ({ isExpanded, onCollapse }: ExpandedPlayerProps) => {
     }
   };
 
+  const handleSelectQueueItem = async (index: number) => {
+    try {
+      if (index < 0 || index >= queue.length) return;
+      setCurrentTrackIndex(index);
+      const loaded = await loadTrack(queue[index]);
+      if (loaded) {
+        const playing = await playTrack();
+        if (playing) setIsPlaying(true);
+      }
+    } catch (error) {
+      console.error('Error selecting queue item:', error);
+    }
+  };
+
+  const handleOpenQueue = () => {
+    setShowMiniPlayer(true);
+    setShowQueueModal(true);
+  };
+
+  const handleLoadLyrics = async () => {
+    if (!currentTrack) return;
+    setLoadingLyrics(true);
+    try {
+      const lyricsData = await getSongLyrics(currentTrack.id);
+      setLyrics(lyricsData || 'Lyrics not found');
+    } catch (error) {
+      console.error('Error loading lyrics:', error);
+      setLyrics('Failed to load lyrics');
+    } finally {
+      setLoadingLyrics(false);
+    }
+  };
+
   const formatTime = (seconds: number) => {
     if (!seconds) return '0:00';
     const mins = Math.floor(seconds / 60);
@@ -264,17 +364,22 @@ const ExpandedPlayer = ({ isExpanded, onCollapse }: ExpandedPlayerProps) => {
       ]}
       {...panResponder.panHandlers}
     >
-      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right', 'bottom']}>
         <View style={styles.header}>
           <TouchableOpacity onPress={onCollapse}>
             <Ionicons name="arrow-back" size={28} color={colors.text} />
           </TouchableOpacity>
-          <TouchableOpacity>
+          <TouchableOpacity onPress={() => setShowMenuModal(true)}>
             <Ionicons name="ellipsis-horizontal-circle" size={28} color={colors.text} />
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={styles.content} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
+        <ScrollView
+          style={styles.content}
+          showsVerticalScrollIndicator={false}
+          nestedScrollEnabled
+          contentContainerStyle={{ paddingBottom: 140 }}
+        >
           {/* Album Art */}
           <View style={styles.albumArtContainer}>
             <Image
@@ -317,6 +422,58 @@ const ExpandedPlayer = ({ isExpanded, onCollapse }: ExpandedPlayerProps) => {
             </View>
           </View>
 
+          {/* Shuffle, Favorite, and Download Actions */}
+          <View style={styles.topActions}>
+            <TouchableOpacity 
+              style={[styles.actionButton, { backgroundColor: isShuffle ? colors.primary + '30' : colors.cardBackground }]}
+              onPress={() => {
+                setIsShuffle(!isShuffle);
+                if (!isShuffle) {
+                  shuffleQueue();
+                }
+              }}
+              activeOpacity={0.7}
+            >
+              <Ionicons 
+                name="shuffle" 
+                size={24} 
+                color={isShuffle ? colors.primary : colors.text} 
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.actionButton, { backgroundColor: colors.cardBackground }]}
+              onPress={handleToggleFavorite}
+              activeOpacity={0.7}
+            >
+              <Ionicons 
+                name={currentTrack && isFavorite(currentTrack.id) ? "heart" : "heart-outline"} 
+                size={24} 
+                color={currentTrack && isFavorite(currentTrack.id) ? colors.primary : colors.text} 
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.actionButton, { backgroundColor: colors.cardBackground }]}
+              onPress={handleDownload}
+              activeOpacity={0.7}
+            >
+              {currentTrack && downloadProgress[currentTrack.id] > 0 && downloadProgress[currentTrack.id] < 1 ? (
+                <View style={styles.progressContainer}>
+                  <Text style={[styles.progressText, { color: colors.primary }]}>
+                    {Math.round(downloadProgress[currentTrack.id] * 100)}%
+                  </Text>
+                </View>
+              ) : (
+                <Ionicons 
+                  name={currentTrack && isDownloaded(currentTrack.id) ? "checkmark-circle" : "download-outline"} 
+                  size={24} 
+                  color={currentTrack && isDownloaded(currentTrack.id) ? colors.primary : colors.text} 
+                />
+              )}
+            </TouchableOpacity>
+          </View>
+
           {/* Main Controls Row */}
           <View style={styles.mainControls}>
             <TouchableOpacity onPress={handleSkipPrevious} style={styles.skipButton}>
@@ -352,25 +509,14 @@ const ExpandedPlayer = ({ isExpanded, onCollapse }: ExpandedPlayerProps) => {
             </TouchableOpacity>
           </View>
 
-          {/* Secondary Controls Row */}
-          <View style={styles.secondaryControls}>
-            <TouchableOpacity style={styles.secondaryButton}>
-              <Ionicons name="heart-outline" size={28} color={colors.text} />
-              <Text style={[styles.secondaryButtonText, { color: colors.subText }]}>Favorite</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.secondaryButton}>
-              <Ionicons name="list" size={28} color={colors.text} />
-              <Text style={[styles.secondaryButtonText, { color: colors.subText }]}>Playlist</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Lyrics Section */}
-          <TouchableOpacity style={styles.lyricsSection} onPress={handleFetchLyrics}>
-            <Ionicons name="musical-notes" size={20} color={colors.primary} />
-            <Text style={[styles.lyricsText, { color: colors.text }]}>
-              {currentTrack?.hasLyrics ? 'View Lyrics' : 'No Lyrics Available'}
-            </Text>
+          {/* Queue Button */}
+          <TouchableOpacity 
+            style={styles.queueButton}
+            onPress={handleOpenQueue}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="list" size={32} color={colors.primary} />
+            <Text style={[styles.queueButtonText, { color: colors.primary }]}>Queue</Text>
           </TouchableOpacity>
         </ScrollView>
 
@@ -398,6 +544,166 @@ const ExpandedPlayer = ({ isExpanded, onCollapse }: ExpandedPlayerProps) => {
               )}
             </ScrollView>
           </SafeAreaView>
+        </Modal>
+
+        {/* Queue Modal */}
+        <Modal
+          visible={showQueueModal}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={() => setShowQueueModal(false)}
+        >
+          <TouchableOpacity 
+            style={styles.queueModalBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowQueueModal(false)}
+          >
+            <TouchableOpacity 
+              activeOpacity={1} 
+              style={[styles.queueModal, { backgroundColor: colors.background }]}
+              onPress={(e) => e.stopPropagation()}
+            > 
+              <View style={[styles.queueModalHeader, { borderBottomColor: colors.border }]}>
+                <Text style={[styles.queueModalTitle, { color: colors.text }]}>Playing Queue</Text>
+                <TouchableOpacity 
+                  onPress={() => setShowQueueModal(false)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  <Ionicons name="close-circle" size={28} color={colors.text} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView
+                style={styles.queueScrollView}
+                nestedScrollEnabled
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.queueScrollContent}
+              >
+                {(queue && queue.length ? queue : currentTrack ? [currentTrack] : []).map((song, index) => (
+                  <TouchableOpacity
+                    key={song.id + index}
+                    style={[
+                      styles.queueItem,
+                      {
+                        backgroundColor: index === currentTrackIndex ? colors.primary + '15' : 'transparent',
+                        borderLeftWidth: index === currentTrackIndex ? 4 : 0,
+                        borderLeftColor: colors.primary,
+                      },
+                    ]}
+                    activeOpacity={0.7}
+                    onPress={() => {
+                      handleSelectQueueItem(index);
+                      setShowQueueModal(false);
+                    }}
+                  >
+                    <Image
+                      source={{ uri: song.image?.[1]?.url || song.image?.[0]?.url || 'https://via.placeholder.com/60' }}
+                      style={styles.queueItemImage}
+                    />
+                    <View style={styles.queueItemInfo}>
+                      <Text style={[styles.queueItemTitle, { color: colors.text }]} numberOfLines={1}>
+                        {song.name}
+                      </Text>
+                      <Text style={[styles.queueItemArtist, { color: colors.subText }]} numberOfLines={1}>
+                        {song.artists?.primary?.[0]?.name || 'Unknown Artist'}
+                      </Text>
+                    </View>
+                    {index === currentTrackIndex && (
+                      <Ionicons name="volume-high" size={20} color={colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                ))}
+
+                {(queue.length === 0 && !currentTrack) && (
+                  <View style={styles.emptyQueueContainer}>
+                    <Ionicons name="musical-notes-outline" size={48} color={colors.subText} />
+                    <Text style={[styles.emptyQueueText, { color: colors.subText }]}>No songs in queue</Text>
+                  </View>
+                )}
+              </ScrollView>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </Modal>
+
+        {/* Menu Modal */}
+        <Modal
+          visible={showMenuModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowMenuModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.menuOverlay}
+            onPress={() => setShowMenuModal(false)}
+            activeOpacity={1}
+          >
+            <View style={[styles.menuContent, { backgroundColor: colors.background }]}>
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => {
+                  handleToggleFavorite();
+                  setShowMenuModal(false);
+                }}
+              >
+                <Ionicons
+                  name={currentTrack && isFavorite(currentTrack.id) ? 'heart' : 'heart-outline'}
+                  size={24}
+                  color={colors.primary}
+                />
+                <Text style={[styles.menuItemText, { color: colors.text }]}>
+                  {currentTrack && isFavorite(currentTrack.id) ? 'Remove from Favorites' : 'Add to Favorites'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => {
+                  handleDownload();
+                  setShowMenuModal(false);
+                }}
+              >
+                {currentTrack && downloadProgress[currentTrack.id] > 0 && downloadProgress[currentTrack.id] < 1 ? (
+                  <>
+                    <View style={[styles.menuProgressContainer, { borderColor: colors.primary }]}>
+                      <Text style={[styles.menuProgressText, { color: colors.primary }]}>
+                        {Math.round(downloadProgress[currentTrack.id] * 100)}%
+                      </Text>
+                    </View>
+                    <Text style={[styles.menuItemText, { color: colors.text }]}>
+                      Downloading...
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons
+                      name={currentTrack && isDownloaded(currentTrack.id) ? 'checkmark-circle' : 'download-outline'}
+                      size={24}
+                      color={colors.primary}
+                    />
+                    <Text style={[styles.menuItemText, { color: colors.text }]}>
+                      {currentTrack && isDownloaded(currentTrack.id) ? 'Downloaded' : 'Download'}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => {
+                  setShowMenuModal(false);
+                  setShowLyrics(true);
+                  handleLoadLyrics();
+                }}
+              >
+                <Ionicons name="document-text" size={24} color={colors.primary} />
+                <Text style={[styles.menuItemText, { color: colors.text }]}>Lyrics</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.menuItem}
+                onPress={() => setShowMenuModal(false)}
+              >
+                <Ionicons name="share-social" size={24} color={colors.primary} />
+                <Text style={[styles.menuItemText, { color: colors.text }]}>Share Song</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
         </Modal>
       </SafeAreaView>
     </Animated.View>
@@ -506,16 +812,129 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 4,
   },
-  lyricsSection: {
-    alignItems: 'center',
-    paddingVertical: 16,
+  topActions: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 8,
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 30,
+    paddingHorizontal: 16,
   },
-  lyricsText: {
-    fontSize: 14,
+  actionButton: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 16,
+  },
+  actionButtonText: {
+    fontSize: 13,
     fontWeight: '600',
+  },
+  progressContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  progressText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  menuProgressContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  menuProgressText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  queueButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 10,
+    marginTop: 5,
+    marginBottom: 80,
+  },
+  queueButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  queueModalBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  queueModal: {
+    height: screenHeight * 0.85,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 10,
+  },
+  queueModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+  },
+  queueModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  queueScrollView: {
+    flex: 1,
+  },
+  queueScrollContent: {
+    paddingBottom: 20,
+  },
+  queueItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    paddingLeft: 16,
+  },
+  queueItemImage: {
+    width: 56,
+    height: 56,
+    borderRadius: 8,
+    marginRight: 12,
+  },
+  queueItemInfo: {
+    flex: 1,
+    marginRight: 8,
+  },
+  queueItemTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  queueItemArtist: {
+    fontSize: 13,
+  },
+  emptyQueueContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  emptyQueueText: {
+    textAlign: 'center',
+    marginTop: 12,
+    fontSize: 15,
   },
   lyricsModal: {
     flex: 1,
@@ -546,6 +965,28 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 28,
     textAlign: 'center',
+  },
+  menuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  menuContent: {
+    paddingBottom: 20,
+    paddingTop: 12,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+  },
+  menuItemText: {
+    fontSize: 16,
+    fontWeight: '500',
+    marginLeft: 16,
   },
 });
 

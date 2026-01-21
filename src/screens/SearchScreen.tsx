@@ -9,6 +9,8 @@ import {
   TextInput,
   ScrollView,
   ActivityIndicator,
+  Modal,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/colors';
@@ -34,12 +36,19 @@ const SearchScreen = () => {
   const [showAllSongsInAllTab, setShowAllSongsInAllTab] = useState(false);
   const [showAllAlbumsInAllTab, setShowAllAlbumsInAllTab] = useState(false);
   const [showAllArtistsInAllTab, setShowAllArtistsInAllTab] = useState(false);
+  const [selectedSong, setSelectedSong] = useState<Song | null>(null);
+  const [showMenu, setShowMenu] = useState(false);
 
   const setQueue = usePlayerStore((state) => state.setQueue);
   const setCurrentTrackIndex = usePlayerStore((state) => state.setCurrentTrackIndex);
   const setIsPlaying = usePlayerStore((state) => state.setIsPlaying);
   const setShowMiniPlayer = usePlayerStore((state) => state.setShowMiniPlayer);
   const setShowExpandedPlayer = usePlayerStore((state) => state.setShowExpandedPlayer);
+  const addToQueue = usePlayerStore((state) => state.addToQueue);
+  const addToQueueNext = usePlayerStore((state) => state.addToQueueNext);
+  const addToFavorites = usePlayerStore((state) => state.addToFavorites);
+  const removeFromFavorites = usePlayerStore((state) => state.removeFromFavorites);
+  const isFavorite = usePlayerStore((state) => state.isFavorite);
 
   const performSearch = useCallback(async (query: string) => {
     if (!query.trim()) {
@@ -115,12 +124,102 @@ const SearchScreen = () => {
         >
           <Ionicons name="play" size={18} color="#fff" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.menuButton}>
+        <TouchableOpacity style={styles.menuButton} onPress={() => handleMenuPress(item)}>
           <Ionicons name="ellipsis-vertical" size={20} color={colors.subText} />
         </TouchableOpacity>
       </TouchableOpacity>
     );
   };
+
+  const handleMenuPress = (song: Song) => {
+    setSelectedSong(song);
+    setShowMenu(true);
+  };
+
+  const handleMenuOption = (option: string) => {
+    if (!selectedSong) return;
+
+    switch (option) {
+      case 'Play Next':
+        addToQueueNext(selectedSong);
+        Alert.alert('Added to Queue', `"${selectedSong.name}" will play next`);
+        break;
+      case 'Add to Playing Queue':
+        addToQueue(selectedSong);
+        Alert.alert('Added to Queue', `"${selectedSong.name}" added to queue`);
+        break;
+      case 'Add to Favorites':
+        addToFavorites(selectedSong);
+        Alert.alert('Added to Favorites', `"${selectedSong.name}" added to favorites`);
+        break;
+      case 'Remove from Favorites':
+        removeFromFavorites(selectedSong.id);
+        Alert.alert('Removed from Favorites', `"${selectedSong.name}" removed from favorites`);
+        break;
+      case 'Go to Album':
+        setShowMenu(false);
+        navigation.navigate('AlbumDetail', { 
+          albumId: selectedSong.album?.id,
+          albumName: selectedSong.album?.name,
+        });
+        break;
+      case 'Go to Artist':
+        setShowMenu(false);
+        navigation.navigate('ArtistDetail', { 
+          artistId: selectedSong.artists?.primary?.[0]?.id,
+          artistName: selectedSong.artists?.primary?.[0]?.name,
+        });
+        break;
+    }
+
+    setShowMenu(false);
+  };
+
+  const renderMenuModal = () => (
+    <Modal
+      visible={showMenu}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowMenu(false)}
+    >
+      <TouchableOpacity
+        style={styles.menuOverlay}
+        onPress={() => setShowMenu(false)}
+        activeOpacity={1}
+      >
+        <View style={[styles.menuContent, { backgroundColor: colors.background }]}>
+          {['Play Next', 'Add to Playing Queue', selectedSong && isFavorite(selectedSong.id) ? 'Remove from Favorites' : 'Add to Favorites', 'Go to Album', 'Go to Artist'].map((option) => (
+            <TouchableOpacity
+              key={option}
+              style={styles.menuItem}
+              onPress={() => handleMenuOption(option)}
+            >
+              <Ionicons
+                name={
+                  option === 'Play Next' 
+                    ? 'play-skip-forward' 
+                    : option === 'Add to Playing Queue'
+                    ? 'list'
+                    : option === 'Remove from Favorites'
+                    ? 'heart'
+                    : option === 'Add to Favorites'
+                    ? 'heart-outline'
+                    : option === 'Go to Album'
+                    ? 'disc'
+                    : 'person'
+                }
+                size={24}
+                color={colors.primary}
+              />
+              <Text style={[styles.menuItemText, { color: colors.text }]}>
+                {option}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
 
   const renderAlbumItem = ({ item }: { item: any }) => (
     <TouchableOpacity
@@ -197,6 +296,7 @@ const SearchScreen = () => {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      {renderMenuModal()}
       {/* Search Bar */}
       <View style={[styles.searchBarContainer, { backgroundColor: colors.background }]}>
         <View style={[styles.searchBar, { backgroundColor: colors.cardBackground }]}>
@@ -565,6 +665,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingBottom: 4,
     opacity: 0.7,
+  },
+  menuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  menuContent: {
+    borderRadius: 12,
+    paddingVertical: 12,
+    minWidth: 200,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  menuItemText: {
+    marginLeft: 16,
+    fontSize: 16,
+    fontWeight: '500',
   },
 });
 
