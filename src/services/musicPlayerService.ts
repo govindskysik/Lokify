@@ -17,7 +17,11 @@ export const setupPlayer = async () => {
       staysActiveInBackground: true,
       playsInSilentModeIOS: true,
       shouldDuckAndroid: true,
+      playThroughEarpieceAndroid: false,
+      interruptionModeIOS: 1, // INTERRUPTION_MODE_IOS_DO_NOT_MIX
+      interruptionModeAndroid: 1, // INTERRUPTION_MODE_ANDROID_DO_NOT_MIX
     });
+    console.log('Audio mode set for background playback');
   } catch (error) {
     console.error('Error setting up audio mode:', error);
   }
