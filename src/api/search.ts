@@ -31,3 +31,30 @@ export const searchSongs = async (query: string, page: number = 0, limit: number
     return [];
   }
 };
+
+export const getSongLyrics = async (songId: string): Promise<string | null> => {
+  try {
+    const url = `${BASE_URL}/songs/${songId}`;
+    console.log('Fetching lyrics for:', url);
+    
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      console.error('Lyrics API Error:', response.status, response.statusText);
+      return null;
+    }
+    
+    const json = await response.json();
+    const songData = json.data?.[0];
+    
+    if (songData?.lyrics) {
+      return songData.lyrics;
+    }
+    
+    console.log('No lyrics found for song');
+    return null;
+  } catch (error) {
+    console.error('Get Lyrics Error:', error);
+    return null;
+  }
+};

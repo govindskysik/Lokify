@@ -6,10 +6,13 @@ import { Song } from '../../types';
 import { searchSongs } from '../../api/search';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import { setupPlayer, loadTrack, playTrack, pauseTrack, resumeTrack } from '../../services/musicPlayerService';
+import { usePlayerStore } from '../../store/playerStore';
 
 const SongsScreen = () => {
   const colors = useTheme();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
+  const { queue, currentTrackIndex, isPlaying, setQueue, setCurrentTrackIndex, setShowMiniPlayer, setIsPlaying, setShowExpandedPlayer } = usePlayerStore();
   const [songs, setSongs] = useState<Song[]>([]);
   const [filteredSongs, setFilteredSongs] = useState<Song[]>([]);
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
@@ -24,6 +27,10 @@ const SongsScreen = () => {
     'punjabi', 'pop', 'rock', 'party',
     'sad', 'happy', 'romantic', 'dance', 'workout'
   ];
+
+  useEffect(() => {
+    setupPlayer();
+  }, []);
 
   useEffect(() => {
     const fetchAllSongs = async () => {
@@ -89,6 +96,25 @@ const SongsScreen = () => {
   const handleMenuPress = (song: Song) => {
     setSelectedSong(song);
     setShowMenu(true);
+  };
+
+  const handlePlaySong = async (song: Song) => {
+    try {
+      // Set the queue with all songs starting from the selected one
+      const selectedIndex = filteredSongs.findIndex((s: Song) => s.id === song.id);
+      setQueue(filteredSongs);
+      setCurrentTrackIndex(selectedIndex);
+      setShowMiniPlayer(true);
+      setShowExpandedPlayer(true);
+      
+      // Load and play the track in background
+      loadTrack(song).then(() => {
+        playTrack();
+        setIsPlaying(true);
+      });
+    } catch (error) {
+      console.error('Error playing song:', error);
+    }
   };
 
   const menuOptions = [
@@ -190,8 +216,31 @@ const SongsScreen = () => {
   );
 
   const renderSongItem = ({ item }: { item: Song }) => {
+    const isCurrentSong = currentTrackIndex !== null && queue[currentTrackIndex]?.id === item.id;
+    const isThisSongPlaying = isCurrentSong && isPlaying;
+
+    const handlePlayPauseToggle = async () => {
+      if (isCurrentSong) {
+        // If this song is already loaded, just toggle play/pause
+        if (isPlaying) {
+          await pauseTrack();
+          setIsPlaying(false);
+        } else {
+          await resumeTrack();
+          setIsPlaying(true);
+        }
+      } else {
+        // Load and play new song
+        handlePlaySong(item);
+      }
+    };
+
     return (
-      <View style={styles.songItem}>
+      <TouchableOpacity 
+        style={styles.songItem}
+        onPress={() => handlePlaySong(item)}
+        activeOpacity={0.7}
+      >
         <Image
           source={{ uri: item.image?.[2]?.url || item.image?.[0]?.url || 'https://via.placeholder.com/60' }}
           style={styles.thumbnail}
@@ -204,8 +253,11 @@ const SongsScreen = () => {
             {item.artists?.primary?.[0]?.name || 'Unknown Artist'} | {Math.floor(item.duration / 60)}:{(item.duration % 60).toString().padStart(2, '0')}
           </Text>
         </View>
-        <TouchableOpacity style={[styles.playButton, { backgroundColor: colors.primary }]}>
-          <Ionicons name="play" size={18} color="#fff" />
+        <TouchableOpacity 
+          style={[styles.playButton, { backgroundColor: colors.primary }]}
+          onPress={handlePlayPauseToggle}
+        >
+          <Ionicons name={isThisSongPlaying ? "pause" : "play"} size={18} color="#fff" />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.menuButton}
@@ -213,7 +265,7 @@ const SongsScreen = () => {
         >
           <Ionicons name="ellipsis-vertical" size={20} color={colors.text} />
         </TouchableOpacity>
-      </View>
+      </TouchableOpacity>
     );
   };
 

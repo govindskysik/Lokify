@@ -1,5 +1,6 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/colors';
 import FavoritesScreen from '../screens/FavoritesScreen';
@@ -7,6 +8,9 @@ import PlaylistsScreen from '../screens/PlaylistsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import HomeScreen from '../screens/HomeScreen';
 import DataTestScreen from '../screens/DataTestScreen';
+import MiniPlayer from '../components/MiniPlayer';
+import ExpandedPlayer from '../components/ExpandedPlayer';
+import { usePlayerStore } from '../store/playerStore';
 
 export type BottomTabsParamList = {
     HomeTab: undefined;
@@ -20,13 +24,15 @@ const Tab = createBottomTabNavigator<BottomTabsParamList>();
 
 const BottomTabs = () => {
     const colors = useTheme();
+    const { showExpandedPlayer, setShowExpandedPlayer } = usePlayerStore();
 
     return (
-        <Tab.Navigator
+        <View style={{ flex: 1 }}>
+            <Tab.Navigator
             screenOptions={({ route }) => ({
                 headerShown: false,
                 sceneContainerStyle: {
-                    paddingBottom: 100,
+                    paddingBottom: 0,
                 },
                 tabBarStyle: {
                     backgroundColor: colors.tabBarBackground,
@@ -110,6 +116,11 @@ const BottomTabs = () => {
                 }}
             />
         </Tab.Navigator>
+            <View style={{ position: 'absolute', bottom: 108, left: 0, right: 0, zIndex: 100 }}>
+                <MiniPlayer onPress={() => setShowExpandedPlayer(true)} />
+            </View>
+            <ExpandedPlayer isExpanded={showExpandedPlayer} onCollapse={() => setShowExpandedPlayer(false)} />
+        </View>
     );
 };
 

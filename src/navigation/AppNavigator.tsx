@@ -3,6 +3,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { useTheme } from '../theme/colors';
 import BottomTabs from './BottomTabs';
 import ArtistDetailScreen from '../screens/ArtistDetailScreen';
+import PlayerScreen from '../screens/PlayerScreen';
 
 export type RootStackParamList = {
   MainTabs: undefined;
@@ -15,6 +16,7 @@ export type RootStackParamList = {
     genreName: string;
     genreQuery: string;
   };
+  Player: undefined;
 };
 
 const Stack = createStackNavigator<RootStackParamList>();
@@ -43,6 +45,11 @@ const AppNavigator = () => {
       <Stack.Screen 
         name="ArtistDetail" 
         component={ArtistDetailScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="Player" 
+        component={PlayerScreen}
         options={{ headerShown: false }}
       />
     </Stack.Navigator>
