@@ -1,21 +1,15 @@
 import React from 'react';
+import { View } from 'react-native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { useTheme } from '../theme/colors';
 import BottomTabs from './BottomTabs';
-import ArtistDetailScreen from '../screens/ArtistDetailScreen';
 import PlayerScreen from '../screens/PlayerScreen';
+import MiniPlayer from '../components/MiniPlayer';
+import ExpandedPlayer from '../components/ExpandedPlayer';
+import { usePlayerStore } from '../store/playerStore';
 
 export type RootStackParamList = {
   MainTabs: undefined;
-  ArtistDetail: {
-    artistId: string;
-    artistName: string;
-    artistImage?: string;
-  };
-  GenreSongs: {
-    genreName: string;
-    genreQuery: string;
-  };
   Player: undefined;
 };
 
@@ -23,36 +17,42 @@ const Stack = createStackNavigator<RootStackParamList>();
 
 const AppNavigator = () => {
   const colors = useTheme();
+  const { showExpandedPlayer, setShowExpandedPlayer } = usePlayerStore();
 
   return (
-    <Stack.Navigator
-      initialRouteName="MainTabs"
-      screenOptions={{
-        headerStyle: {
-          backgroundColor: colors.primary,
-        },
-        headerTintColor: '#fff',
-        headerTitleStyle: {
-          fontWeight: 'bold',
-        },
-      }}
-    >
-      <Stack.Screen 
-        name="MainTabs" 
-        component={BottomTabs}
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen 
-        name="ArtistDetail" 
-        component={ArtistDetailScreen}
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen 
-        name="Player" 
-        component={PlayerScreen}
-        options={{ headerShown: false }}
-      />
-    </Stack.Navigator>
+    <View style={{ flex: 1 }}>
+      <Stack.Navigator
+        initialRouteName="MainTabs"
+        screenOptions={{
+          headerStyle: {
+            backgroundColor: colors.primary,
+          },
+          headerTintColor: '#fff',
+          headerTitleStyle: {
+            fontWeight: 'bold',
+          },
+        }}
+      >
+        <Stack.Screen 
+          name="MainTabs" 
+          component={BottomTabs}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="Player" 
+          component={PlayerScreen}
+          options={{ headerShown: false }}
+        />
+      </Stack.Navigator>
+      
+      {/* Global MiniPlayer - shows on all screens above bottom tabs */}
+      <View style={{ position: 'absolute', bottom: 100, left: 0, right: 0, zIndex: 100 }}>
+        <MiniPlayer onPress={() => setShowExpandedPlayer(true)} />
+      </View>
+      
+      {/* Global ExpandedPlayer */}
+      <ExpandedPlayer isExpanded={showExpandedPlayer} onCollapse={() => setShowExpandedPlayer(false)} />
+    </View>
   );
 };
 

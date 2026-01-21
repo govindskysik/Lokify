@@ -53,3 +53,14 @@ export const usePlayerStore = create<PlayerStore>((set) => ({
   showExpandedPlayer: false,
   setShowExpandedPlayer: (show) => set({ showExpandedPlayer: show }),
 }));
+
+// Optimized selectors to prevent unnecessary re-renders
+export const useCurrentTrack = () =>
+  usePlayerStore((state) => {
+    const track = state.currentTrackIndex !== null ? state.queue[state.currentTrackIndex] : null;
+    return track;
+  });
+
+export const useIsPlaying = () => usePlayerStore((state) => state.isPlaying);
+export const useQueue = () => usePlayerStore((state) => state.queue);
+export const useCurrentTrackIndex = () => usePlayerStore((state) => state.currentTrackIndex);

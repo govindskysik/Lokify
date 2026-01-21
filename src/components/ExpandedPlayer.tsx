@@ -120,18 +120,22 @@ const ExpandedPlayer = ({ isExpanded, onCollapse }: ExpandedPlayerProps) => {
   }, [isExpanded, slideAnim]);
 
   useEffect(() => {
-    if (isExpanded) {
+    if (isExpanded && isPlaying) {
       updateInterval.current = setInterval(() => {
         setPosition(getCurrentPosition());
         setDuration(getDuration());
-      }, 500);
+      }, 1000);
+    } else {
+      if (updateInterval.current) {
+        clearInterval(updateInterval.current);
+      }
     }
     return () => {
       if (updateInterval.current) {
         clearInterval(updateInterval.current);
       }
     };
-  }, [isExpanded]);
+  }, [isExpanded, isPlaying]);
 
   const handleFetchLyrics = async () => {
     if (!currentTrack || !currentTrack.hasLyrics) {

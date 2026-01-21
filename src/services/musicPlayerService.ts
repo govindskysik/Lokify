@@ -125,8 +125,31 @@ export const seekTo = async (position: number) => {
   try {
     if (!sound) return;
     await sound.setPositionAsync(position * 1000); // Convert to milliseconds
+    soundPosition = position;
   } catch (error) {
     console.error('Error seeking:', error);
+  }
+};
+
+export const seekForward = async (seconds: number = 10) => {
+  try {
+    if (!sound) return;
+    const newPosition = Math.min(soundPosition + seconds, soundDuration);
+    await sound.setPositionAsync(newPosition * 1000);
+    soundPosition = newPosition;
+  } catch (error) {
+    console.error('Error seeking forward:', error);
+  }
+};
+
+export const seekBackward = async (seconds: number = 10) => {
+  try {
+    if (!sound) return;
+    const newPosition = Math.max(soundPosition - seconds, 0);
+    await sound.setPositionAsync(newPosition * 1000);
+    soundPosition = newPosition;
+  } catch (error) {
+    console.error('Error seeking backward:', error);
   }
 };
 

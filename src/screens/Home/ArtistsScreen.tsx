@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../theme/colors';
 import { Song } from '../../types';
 import { searchSongs } from '../../api/search';
@@ -36,42 +37,66 @@ const ArtistsScreen = () => {
 
   useEffect(() => {
     const fetchAllArtists = async () => {
-      const artistsMap = new Map<string, Artist>();
-      const MAX_SONGS = 500;
-      let totalSongsFetched = 0;
-      
-      for (let i = 0; i < queries.length; i++) {
-        if (totalSongsFetched >= MAX_SONGS) break;
-
-        const results = await searchSongs(queries[i], 0, 20);
-        console.log(`Fetched from ${queries[i]}: ${results.length} songs`);
-        totalSongsFetched += results.length;
+      try {
+        // Check cache first
+        const cached = await AsyncStorage.getItem('cached_artists');
+        const cacheTimestamp = await AsyncStorage.getItem('cached_artists_timestamp');
         
-        if (results.length > 0) {
-          results.forEach((song) => {
-            const artistName = song.artists?.primary?.[0]?.name || 'Unknown Artist';
-            const artistId = song.artists?.primary?.[0]?.id || artistName;
-            const artistImages = song.artists?.primary?.[0]?.image || [];
-            const artistImage = artistImages.length > 0 ? artistImages[artistImages.length - 1]?.url : undefined;
-            
-            if (artistsMap.has(artistId)) {
-              const existing = artistsMap.get(artistId)!;
-              existing.songCount += 1;
-            } else {
-              artistsMap.set(artistId, {
-                id: artistId,
-                name: artistName,
-                image: artistImage,
-                songCount: 1,
-              });
-            }
-          });
+        // Use cache if it's less than 24 hours old
+        if (cached && cacheTimestamp) {
+          const age = Date.now() - parseInt(cacheTimestamp);
+          const ONE_DAY = 24 * 60 * 60 * 1000;
           
-          setArtists(Array.from(artistsMap.values()));
+          if (age < ONE_DAY) {
+            const cachedArtists = JSON.parse(cached);
+            setArtists(cachedArtists);
+            return;
+          }
         }
+
+        // Fetch fresh data
+        const artistsMap = new Map<string, Artist>();
+        const MAX_SONGS = 500;
+        let totalSongsFetched = 0;
+        
+        for (let i = 0; i < queries.length; i++) {
+          if (totalSongsFetched >= MAX_SONGS) break;
+
+          const results = await searchSongs(queries[i], 0, 20);
+          totalSongsFetched += results.length;
+          
+          if (results.length > 0) {
+            results.forEach((song) => {
+              const artistName = song.artists?.primary?.[0]?.name || 'Unknown Artist';
+              const artistId = song.artists?.primary?.[0]?.id || artistName;
+              const artistImages = song.artists?.primary?.[0]?.image || [];
+              const artistImage = artistImages.length > 0 ? artistImages[artistImages.length - 1]?.url : undefined;
+              
+              if (artistsMap.has(artistId)) {
+                const existing = artistsMap.get(artistId)!;
+                existing.songCount += 1;
+              } else {
+                artistsMap.set(artistId, {
+                  id: artistId,
+                  name: artistName,
+                  image: artistImage,
+                  songCount: 1,
+                });
+              }
+            });
+            
+            setArtists(Array.from(artistsMap.values()));
+          }
+        }
+        
+        const allArtists = Array.from(artistsMap.values());
+        
+        // Cache the results
+        await AsyncStorage.setItem('cached_artists', JSON.stringify(allArtists));
+        await AsyncStorage.setItem('cached_artists_timestamp', Date.now().toString());
+      } catch (error) {
+        console.error('Error fetching artists:', error);
       }
-      
-      console.log('Total unique artists loaded:', artistsMap.size);
     };
 
     fetchAllArtists();
@@ -219,15 +244,6 @@ const ArtistsScreen = () => {
           </Text>
         </View>
         <TouchableOpacity 
-          style={[styles.playButton, { backgroundColor: colors.primary }]}
-          onPress={(e) => {
-            e.stopPropagation();
-            console.log('Play from artist:', item.name);
-          }}
-        >
-          <Ionicons name="play" size={18} color="#fff" />
-        </TouchableOpacity>
-        <TouchableOpacity 
           style={styles.menuButton}
           onPress={(e) => {
             e.stopPropagation();
@@ -309,6 +325,16 @@ const ArtistsScreen = () => {
               <Text style={[styles.emptyText, { color: colors.text }]}>Loading artists...</Text>
             </View>
           }
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          windowSize={10}
+          initialNumToRender={15}
+          updateCellsBatchingPeriod={50}
+          getItemLayout={(data, index) => ({
+            length: 70,
+            offset: 70 * index,
+            index,
+          })}
         />
         {renderMenuModal()}
         {renderFilterModal()}

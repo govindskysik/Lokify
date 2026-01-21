@@ -16,7 +16,12 @@ import { pauseTrack, resumeTrack, seekTo, getCurrentPosition, getDuration, getIs
 
 const MiniPlayer = ({ onPress }: { onPress: () => void }) => {
   const colors = useTheme();
-  const { queue, currentTrackIndex, showMiniPlayer, setCurrentTrackIndex, isPlaying, setIsPlaying } = usePlayerStore();
+  const queue = usePlayerStore((state) => state.queue);
+  const currentTrackIndex = usePlayerStore((state) => state.currentTrackIndex);
+  const showMiniPlayer = usePlayerStore((state) => state.showMiniPlayer);
+  const setCurrentTrackIndex = usePlayerStore((state) => state.setCurrentTrackIndex);
+  const isPlaying = usePlayerStore((state) => state.isPlaying);
+  const setIsPlaying = usePlayerStore((state) => state.setIsPlaying);
   const [currentTrack, setCurrentTrack] = useState<any>(null);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -38,22 +43,20 @@ const MiniPlayer = ({ onPress }: { onPress: () => void }) => {
   }, []);
 
   useEffect(() => {
-    if (showMiniPlayer) {
-      updateInterval.current = setInterval(async () => {
+    if (showMiniPlayer && isPlaying) {
+      updateInterval.current = setInterval(() => {
         const pos = getCurrentPosition();
         const dur = getDuration();
         setPosition(pos);
         setDuration(dur);
-        const playing = await getIsPlaying();
-        setIsPlaying(playing);
-      }, 500);
+      }, 1000);
     }
     return () => {
       if (updateInterval.current) {
         clearInterval(updateInterval.current);
       }
     };
-  }, [showMiniPlayer, setIsPlaying]);
+  }, [showMiniPlayer, isPlaying]);
 
   const handleAppStateChange = (nextAppState: AppStateStatus) => {
     appState.current = nextAppState;

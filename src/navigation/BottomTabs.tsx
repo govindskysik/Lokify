@@ -1,34 +1,52 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { View } from 'react-native';
+import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../theme/colors';
 import FavoritesScreen from '../screens/FavoritesScreen';
-import PlaylistsScreen from '../screens/PlaylistsScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import HomeScreen from '../screens/HomeScreen';
-import DataTestScreen from '../screens/DataTestScreen';
-import MiniPlayer from '../components/MiniPlayer';
-import ExpandedPlayer from '../components/ExpandedPlayer';
-import { usePlayerStore } from '../store/playerStore';
+import ArtistDetailScreen from '../screens/ArtistDetailScreen';
+import AlbumDetailScreen from '../screens/AlbumDetailScreen';
 
 export type BottomTabsParamList = {
     HomeTab: undefined;
-    DataTest: undefined;
     Favorites: undefined;
-    Playlists: undefined;
     Settings: undefined;
 };
 
+export type HomeStackParamList = {
+    Home: undefined;
+    ArtistDetail: {
+        artistId: string;
+        artistName: string;
+        artistImage?: string;
+    };
+    AlbumDetail: {
+        albumId: string;
+        albumName: string;
+        albumImage?: string;
+    };
+};
+
 const Tab = createBottomTabNavigator<BottomTabsParamList>();
+const HomeStack = createStackNavigator<HomeStackParamList>();
+
+const HomeStackNavigator = () => {
+    return (
+        <HomeStack.Navigator screenOptions={{ headerShown: false }}>
+            <HomeStack.Screen name="Home" component={HomeScreen} />
+            <HomeStack.Screen name="ArtistDetail" component={ArtistDetailScreen} />
+            <HomeStack.Screen name="AlbumDetail" component={AlbumDetailScreen} />
+        </HomeStack.Navigator>
+    );
+};
 
 const BottomTabs = () => {
     const colors = useTheme();
-    const { showExpandedPlayer, setShowExpandedPlayer } = usePlayerStore();
 
     return (
-        <View style={{ flex: 1 }}>
-            <Tab.Navigator
+        <Tab.Navigator
             screenOptions={({ route }) => ({
                 headerShown: false,
                 sceneContainerStyle: {
@@ -60,12 +78,8 @@ const BottomTabs = () => {
 
                     if (route.name === 'HomeTab') {
                         iconName = focused ? 'home' : 'home-outline';
-                    } else if (route.name === 'DataTest') {
-                        iconName = focused ? 'code' : 'code-outline';
                     } else if (route.name === 'Favorites') {
                         iconName = focused ? 'heart' : 'heart-outline';
-                    } else if (route.name === 'Playlists') {
-                        iconName = focused ? 'musical-notes' : 'musical-notes-outline';
                     } else if (route.name === 'Settings') {
                         iconName = focused ? 'settings' : 'settings-outline';
                     }
@@ -82,16 +96,9 @@ const BottomTabs = () => {
         >
             <Tab.Screen
                 name="HomeTab"
-                component={HomeScreen}
+                component={HomeStackNavigator}
                 options={{
                     tabBarLabel: 'Home',
-                }}
-            />
-            <Tab.Screen
-                name="DataTest"
-                component={DataTestScreen}
-                options={{
-                    tabBarLabel: 'API Test',
                 }}
             />
             <Tab.Screen
@@ -102,13 +109,6 @@ const BottomTabs = () => {
                 }}
             />
             <Tab.Screen
-                name="Playlists"
-                component={PlaylistsScreen}
-                options={{
-                    tabBarLabel: 'Playlists',
-                }}
-            />
-            <Tab.Screen
                 name="Settings"
                 component={SettingsScreen}
                 options={{
@@ -116,11 +116,6 @@ const BottomTabs = () => {
                 }}
             />
         </Tab.Navigator>
-            <View style={{ position: 'absolute', bottom: 108, left: 0, right: 0, zIndex: 100 }}>
-                <MiniPlayer onPress={() => setShowExpandedPlayer(true)} />
-            </View>
-            <ExpandedPlayer isExpanded={showExpandedPlayer} onCollapse={() => setShowExpandedPlayer(false)} />
-        </View>
     );
 };
 

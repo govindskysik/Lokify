@@ -1,13 +1,11 @@
 import React from 'react';
 import { createMaterialTopTabNavigator } from '@react-navigation/material-top-tabs';
 import { useTheme } from '../theme/colors';
-import SuggestedScreen from '../screens/Home/SuggestedScreen';
 import SongsScreen from '../screens/Home/SongsScreen';
 import ArtistsScreen from '../screens/Home/ArtistsScreen';
 import AlbumsScreen from '../screens/Home/AlbumsScreen';
 
 export type HomeTopTabsParamList = {
-  Suggested: undefined;
   Songs: undefined;
   Artists: undefined;
   Albums: undefined;
@@ -21,7 +19,7 @@ const HomeTopTabs = () => {
   return (
     <Tab.Navigator
       screenOptions={{
-        tabBarScrollEnabled: true,
+        tabBarScrollEnabled: false,
         tabBarStyle: {
           backgroundColor: colors.background,
           elevation: 0,
@@ -37,8 +35,7 @@ const HomeTopTabs = () => {
           textTransform: 'none',
         },
         tabBarItemStyle: {
-          width: 'auto',
-          paddingHorizontal: 16,
+          flex: 1,
         },
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.subText,
@@ -46,11 +43,6 @@ const HomeTopTabs = () => {
         lazy: false,
       }}
     >
-      <Tab.Screen
-        name="Suggested"
-        component={SuggestedScreen}
-        options={{ tabBarLabel: 'Suggested' }}
-      />
       <Tab.Screen
         name="Songs"
         component={SongsScreen}

@@ -11,7 +11,9 @@ const HomeHeader = () => {
         <SafeAreaView edges={['top']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
             <View style={styles.container}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                    <Ionicons name="musical-notes" size={32} backgroundColor={colors.text} borderRadius={"100%"} padding={8} color={colors.primary} />
+                    <View style={[styles.iconContainer, { backgroundColor: colors.text }]}>
+                        <Ionicons name="musical-notes" size={32} color={colors.primary} />
+                    </View>
                     <Text style={[styles.logo, { color: colors.text }]}>Lokify</Text>
                 </View>
                 <TouchableOpacity>
@@ -31,6 +33,10 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingVertical: 12,
+    },
+    iconContainer: {
+        padding: 8,
+        borderRadius: 24, // Half of (32 + 8*2) for circular shape
     },
     logo: {
         fontSize: 32,

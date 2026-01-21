@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, Modal } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../theme/colors';
 import { searchSongs } from '../../api/search';
 import { Ionicons } from '@expo/vector-icons';
@@ -32,42 +33,66 @@ const AlbumsScreen = () => {
 
   useEffect(() => {
     const fetchAllAlbums = async () => {
-      const albumsMap = new Map<string, Album>();
-      const MAX_SONGS = 500;
-      let totalSongsFetched = 0;
-      
-      for (let i = 0; i < queries.length; i++) {
-        if (totalSongsFetched >= MAX_SONGS) break;
-
-        const results = await searchSongs(queries[i], 0, 20);
-        console.log(`Fetched from ${queries[i]}: ${results.length} songs`);
-        totalSongsFetched += results.length;
+      try {
+        // Check cache first
+        const cached = await AsyncStorage.getItem('cached_albums');
+        const cacheTimestamp = await AsyncStorage.getItem('cached_albums_timestamp');
         
-        if (results.length > 0) {
-          results.forEach((song) => {
-            const albumName = song.album?.name || 'Unknown Album';
-            const albumId = song.album?.id || albumName;
-            const albumImages = song.image || [];
-            const albumImage = albumImages.length > 0 ? albumImages[albumImages.length - 1]?.url : undefined;
-            
-            if (albumsMap.has(albumId)) {
-              const existing = albumsMap.get(albumId)!;
-              existing.songCount += 1;
-            } else {
-              albumsMap.set(albumId, {
-                id: albumId,
-                name: albumName,
-                image: albumImage,
-                songCount: 1,
-              });
-            }
-          });
+        // Use cache if it's less than 24 hours old
+        if (cached && cacheTimestamp) {
+          const age = Date.now() - parseInt(cacheTimestamp);
+          const ONE_DAY = 24 * 60 * 60 * 1000;
           
-          setAlbums(Array.from(albumsMap.values()));
+          if (age < ONE_DAY) {
+            const cachedAlbums = JSON.parse(cached);
+            setAlbums(cachedAlbums);
+            return;
+          }
         }
+
+        // Fetch fresh data
+        const albumsMap = new Map<string, Album>();
+        const MAX_SONGS = 500;
+        let totalSongsFetched = 0;
+        
+        for (let i = 0; i < queries.length; i++) {
+          if (totalSongsFetched >= MAX_SONGS) break;
+
+          const results = await searchSongs(queries[i], 0, 20);
+          totalSongsFetched += results.length;
+          
+          if (results.length > 0) {
+            results.forEach((song) => {
+              const albumName = song.album?.name || 'Unknown Album';
+              const albumId = song.album?.id || albumName;
+              const albumImages = song.image || [];
+              const albumImage = albumImages.length > 0 ? albumImages[albumImages.length - 1]?.url : undefined;
+              
+              if (albumsMap.has(albumId)) {
+                const existing = albumsMap.get(albumId)!;
+                existing.songCount += 1;
+              } else {
+                albumsMap.set(albumId, {
+                  id: albumId,
+                  name: albumName,
+                  image: albumImage,
+                  songCount: 1,
+                });
+              }
+            });
+            
+            setAlbums(Array.from(albumsMap.values()));
+          }
+        }
+        
+        const allAlbums = Array.from(albumsMap.values());
+        
+        // Cache the results
+        await AsyncStorage.setItem('cached_albums', JSON.stringify(allAlbums));
+        await AsyncStorage.setItem('cached_albums_timestamp', Date.now().toString());
+      } catch (error) {
+        console.error('Error fetching albums:', error);
       }
-      
-      console.log('Total unique albums loaded:', albumsMap.size);
     };
 
     fetchAllAlbums();
@@ -194,7 +219,14 @@ const AlbumsScreen = () => {
 
   const renderAlbumItem = ({ item }: { item: Album }) => {
     return (
-      <View style={styles.albumItem}>
+      <TouchableOpacity 
+        style={styles.albumItem}
+        onPress={() => navigation.navigate('AlbumDetail' as any, {
+          albumId: item.id,
+          albumName: item.name,
+          albumImage: item.image
+        })}
+      >
         <View style={styles.albumCard}>
           <View style={styles.imageContainer}>
             <Image
@@ -203,7 +235,10 @@ const AlbumsScreen = () => {
             />
             <TouchableOpacity 
               style={styles.menuButton}
-              onPress={() => handleMenuPress(item)}
+              onPress={(e) => {
+                e.stopPropagation();
+                handleMenuPress(item);
+              }}
             >
               <Ionicons name="ellipsis-vertical" size={20} color="#fff" />
             </TouchableOpacity>
@@ -215,7 +250,7 @@ const AlbumsScreen = () => {
             {item.songCount} {item.songCount === 1 ? 'song' : 'songs'}
           </Text>
         </View>
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -291,6 +326,11 @@ const AlbumsScreen = () => {
               <Text style={[styles.emptyText, { color: colors.text }]}>Loading albums...</Text>
             </View>
           }
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          windowSize={10}
+          initialNumToRender={10}
+          updateCellsBatchingPeriod={50}
         />
         {renderMenuModal()}
         {renderFilterModal()}

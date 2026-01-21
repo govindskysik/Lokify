@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, FlatList } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../theme/colors';
 import { Song } from '../types';
@@ -9,14 +10,14 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { usePlayerStore } from '../store/playerStore';
 import { loadTrack, playTrack } from '../services/musicPlayerService';
 
-const ArtistDetailScreen = () => {
+const AlbumDetailScreen = () => {
   const colors = useTheme();
   const navigation = useNavigation();
   const route = useRoute();
-  const { artistId, artistName, artistImage } = route.params as { artistId: string; artistName: string; artistImage?: string };
+  const { albumId, albumName, albumImage } = route.params as { albumId: string; albumName: string; albumImage?: string };
   
   const [songs, setSongs] = useState<Song[]>([]);
-  const [albums, setAlbums] = useState<Set<string>>(new Set());
+  const [artists, setArtists] = useState<Set<string>>(new Set());
   const [totalDuration, setTotalDuration] = useState(0);
   const [showAllSongs, setShowAllSongs] = useState(false);
   
@@ -24,13 +25,12 @@ const ArtistDetailScreen = () => {
   const setCurrentTrackIndex = usePlayerStore((state) => state.setCurrentTrackIndex);
   const setIsPlaying = usePlayerStore((state) => state.setIsPlaying);
   const setShowMiniPlayer = usePlayerStore((state) => state.setShowMiniPlayer);
-  const setShowExpandedPlayer = usePlayerStore((state) => state.setShowExpandedPlayer);
 
   useEffect(() => {
-    const fetchArtistSongs = async () => {
+    const fetchAlbumSongs = async () => {
       try {
-        const cacheKey = `artist_${artistId}_songs`;
-        const cacheTimestampKey = `artist_${artistId}_songs_timestamp`;
+        const cacheKey = `album_${albumId}_songs`;
+        const cacheTimestampKey = `album_${albumId}_songs_timestamp`;
         
         // Check cache first
         const cached = await AsyncStorage.getItem(cacheKey);
@@ -44,45 +44,46 @@ const ArtistDetailScreen = () => {
           if (age < ONE_DAY) {
             const cachedData = JSON.parse(cached);
             setSongs(cachedData.songs);
-            setAlbums(new Set(cachedData.albumIds));
+            setArtists(new Set(cachedData.artistNames));
             setTotalDuration(cachedData.totalDuration);
             return;
           }
         }
 
         // Fetch fresh data
-        const results = await searchSongs(artistName, 0, 50);
-        const artistSongs = results.filter(song => 
-          song.artists?.primary?.some(artist => artist.id === artistId || artist.name === artistName)
+        const results = await searchSongs(albumName, 0, 50);
+        const albumSongs = results.filter(song => 
+          song.album?.id === albumId || song.album?.name === albumName
         );
         
-        setSongs(artistSongs);
+        setSongs(albumSongs);
         
-        const albumSet = new Set<string>();
+        const artistSet = new Set<string>();
         let duration = 0;
-        artistSongs.forEach(song => {
-          if (song.album?.id) albumSet.add(song.album.id);
+        albumSongs.forEach(song => {
+          const artistName = song.artists?.primary?.[0]?.name || 'Unknown Artist';
+          artistSet.add(artistName);
           duration += song.duration || 0;
         });
         
-        setAlbums(albumSet);
+        setArtists(artistSet);
         setTotalDuration(duration);
         
         // Cache the results
         const cacheData = {
-          songs: artistSongs,
-          albumIds: Array.from(albumSet),
+          songs: albumSongs,
+          artistNames: Array.from(artistSet),
           totalDuration: duration,
         };
         await AsyncStorage.setItem(cacheKey, JSON.stringify(cacheData));
         await AsyncStorage.setItem(cacheTimestampKey, Date.now().toString());
       } catch (error) {
-        console.error('Error fetching artist songs:', error);
+        console.error('Error fetching album songs:', error);
       }
     };
 
-    fetchArtistSongs();
-  }, [artistId, artistName]);
+    fetchAlbumSongs();
+  }, [albumId, albumName]);
 
   const formatDuration = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
@@ -123,7 +124,7 @@ const ArtistDetailScreen = () => {
           {item.name}
         </Text>
         <Text style={[styles.artistName, { color: colors.subText }]} numberOfLines={1}>
-          {artistName}
+          {item.artists?.primary?.[0]?.name || 'Unknown Artist'}
         </Text>
       </View>
       <TouchableOpacity 
@@ -139,7 +140,7 @@ const ArtistDetailScreen = () => {
   );
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: colors.background }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.headerButton}>
@@ -156,23 +157,23 @@ const ArtistDetailScreen = () => {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Artist Image */}
-        <View style={styles.artistImageContainer}>
+        {/* Album Image */}
+        <View style={styles.albumImageContainer}>
           <Image
-            source={{ uri: artistImage || 'https://via.placeholder.com/300' }}
-            style={styles.artistImage}
+            source={{ uri: albumImage || 'https://via.placeholder.com/300' }}
+            style={styles.albumImage}
           />
         </View>
 
-        {/* Artist Name */}
-        <Text style={[styles.artistNameTitle, { color: colors.text }]}>
-          {artistName}
+        {/* Album Name */}
+        <Text style={[styles.albumNameTitle, { color: colors.text }]}>
+          {albumName}
         </Text>
 
         {/* Stats */}
         <View style={styles.statsContainer}>
           <Text style={[styles.statsText, { color: colors.subText }]}>
-            {albums.size} {albums.size === 1 ? 'Album' : 'Albums'}
+            {artists.size} {artists.size === 1 ? 'Artist' : 'Artists'}
           </Text>
           <Text style={[styles.statsText, { color: colors.subText }]}>|</Text>
           <Text style={[styles.statsText, { color: colors.subText }]}>
@@ -255,7 +256,7 @@ const ArtistDetailScreen = () => {
           />
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -265,142 +266,136 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    paddingTop: 50,
   },
   headerButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 8,
   },
   headerRight: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 12,
   },
-  artistImageContainer: {
-    alignItems: 'center',
-    marginTop: 20,
+  albumImageContainer: {
+    width: '100%',
+    aspectRatio: 1,
+    overflow: 'hidden',
     marginBottom: 20,
   },
-  artistImage: {
-    width: 250,
-    height: 250,
-    borderRadius: 40,
+  albumImage: {
+    width: '100%',
+    height: '100%',
   },
-  artistNameTitle: {
-    fontSize: 28,
+  albumNameTitle: {
+    fontSize: 24,
     fontWeight: '700',
-    textAlign: 'center',
+    paddingHorizontal: 16,
     marginBottom: 12,
   },
   statsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 24,
+    paddingHorizontal: 16,
+    marginBottom: 20,
+    flexWrap: 'wrap',
   },
   statsText: {
-    fontSize: 13,
-    fontWeight: '500',
+    fontSize: 12,
+    fontWeight: '600',
+    marginHorizontal: 4,
   },
   actionButtons: {
     flexDirection: 'row',
-    paddingHorizontal: 24,
     gap: 12,
-    marginBottom: 32,
+    paddingHorizontal: 16,
+    marginBottom: 24,
   },
   shuffleButton: {
     flex: 1,
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 28,
+    alignItems: 'center',
     gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
   },
   shuffleButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
   },
   playButtonLarge: {
     flex: 1,
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 14,
-    borderRadius: 28,
-    borderWidth: 2,
+    alignItems: 'center',
     gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 2,
   },
   playButtonText: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
   },
   songsSection: {
     paddingHorizontal: 16,
-    paddingBottom: 24,
+    paddingBottom: 40,
   },
   songsSectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   songsTitle: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: '700',
   },
   seeAllText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
   },
   songItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    marginBottom: 12,
+    gap: 12,
   },
   songThumbnail: {
-    width: 60,
-    height: 60,
-    borderRadius: 12,
-    marginRight: 12,
+    width: 50,
+    height: 50,
+    borderRadius: 8,
   },
   songInfo: {
     flex: 1,
   },
   songName: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     marginBottom: 4,
   },
   artistName: {
-    fontSize: 13,
+    fontSize: 12,
   },
   playButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 8,
   },
   menuButton: {
-    width: 36,
-    height: 36,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 8,
   },
   emptyText: {
-    textAlign: 'center',
     fontSize: 14,
-    marginTop: 20,
+    textAlign: 'center',
+    paddingVertical: 20,
   },
 });
 
-export default ArtistDetailScreen;
+export default AlbumDetailScreen;

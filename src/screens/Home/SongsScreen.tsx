@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, memo } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../../theme/colors';
 import { Song } from '../../types';
 import { searchSongs } from '../../api/search';
@@ -9,10 +10,67 @@ import { useNavigation } from '@react-navigation/native';
 import { setupPlayer, loadTrack, playTrack, pauseTrack, resumeTrack } from '../../services/musicPlayerService';
 import { usePlayerStore } from '../../store/playerStore';
 
+// Memoized Song Item Component
+const SongItem = memo((({
+  item,
+  isCurrentSong,
+  isPlaying,
+  onPlayPause,
+  onPress,
+  onMenu,
+  colors,
+}: {
+  item: any;
+  isCurrentSong: boolean;
+  isPlaying: boolean;
+  onPlayPause: (item: any) => void;
+  onPress: (item: any) => void;
+  onMenu: (item: any) => void;
+  colors: any;
+}) => (
+  <TouchableOpacity 
+    style={styles.songItem}
+    onPress={() => onPress(item)}
+    activeOpacity={0.7}
+  >
+    <Image
+      source={{ uri: item.image?.[2]?.url || item.image?.[0]?.url || 'https://via.placeholder.com/60' }}
+      style={styles.thumbnail}
+    />
+    <View style={styles.songInfo}>
+      <Text style={[styles.songName, { color: colors.text }]} numberOfLines={1}>
+        {item.name}
+      </Text>
+      <Text style={[styles.artistInfo, { color: colors.subText }]} numberOfLines={1}>
+        {item.artists?.primary?.[0]?.name || 'Unknown Artist'} | {Math.floor(item.duration / 60)}:{(item.duration % 60).toString().padStart(2, '0')}
+      </Text>
+    </View>
+    <TouchableOpacity 
+      style={[styles.playButton, { backgroundColor: colors.primary }]}
+      onPress={() => onPlayPause(item)}
+    >
+      <Ionicons name={isCurrentSong && isPlaying ? "pause" : "play"} size={18} color="#fff" />
+    </TouchableOpacity>
+    <TouchableOpacity
+      style={styles.menuButton}
+      onPress={() => onMenu(item)}
+    >
+      <Ionicons name="ellipsis-vertical" size={20} color={colors.text} />
+    </TouchableOpacity>
+  </TouchableOpacity>
+)));
+
 const SongsScreen = () => {
   const colors = useTheme();
   const navigation = useNavigation<any>();
-  const { queue, currentTrackIndex, isPlaying, setQueue, setCurrentTrackIndex, setShowMiniPlayer, setIsPlaying, setShowExpandedPlayer } = usePlayerStore();
+  const queue = usePlayerStore((state) => state.queue);
+  const currentTrackIndex = usePlayerStore((state) => state.currentTrackIndex);
+  const isPlaying = usePlayerStore((state) => state.isPlaying);
+  const setQueue = usePlayerStore((state) => state.setQueue);
+  const setCurrentTrackIndex = usePlayerStore((state) => state.setCurrentTrackIndex);
+  const setIsPlaying = usePlayerStore((state) => state.setIsPlaying);
+  const setShowMiniPlayer = usePlayerStore((state) => state.setShowMiniPlayer);
+  const setShowExpandedPlayer = usePlayerStore((state) => state.setShowExpandedPlayer);
   const [songs, setSongs] = useState<Song[]>([]);
   const [filteredSongs, setFilteredSongs] = useState<Song[]>([]);
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
@@ -34,25 +92,47 @@ const SongsScreen = () => {
 
   useEffect(() => {
     const fetchAllSongs = async () => {
-      let allSongs: Song[] = [];
-      const MAX_SONGS = 500;
-
-      for (let i = 0; i < queries.length; i++) {
-        if (allSongs.length >= MAX_SONGS) break;
-
-        const results = await searchSongs(queries[i], 0, 20);
-        console.log(`Fetched from ${queries[i]}: ${results.length} songs`);
-
-        if (results.length > 0) {
-          const existingIds = new Set(allSongs.map(s => s.id));
-          const newSongs = results.filter(song => !existingIds.has(song.id));
-          allSongs = [...allSongs, ...newSongs].slice(0, MAX_SONGS);
-
-          setSongs(allSongs);
+      try {
+        // Check cache first
+        const cached = await AsyncStorage.getItem('cached_songs');
+        const cacheTimestamp = await AsyncStorage.getItem('cached_songs_timestamp');
+        
+        // Use cache if it's less than 24 hours old
+        if (cached && cacheTimestamp) {
+          const age = Date.now() - parseInt(cacheTimestamp);
+          const ONE_DAY = 24 * 60 * 60 * 1000;
+          
+          if (age < ONE_DAY) {
+            const cachedSongs = JSON.parse(cached);
+            setSongs(cachedSongs);
+            return;
+          }
         }
-      }
 
-      console.log('Total unique songs loaded:', allSongs.length);
+        // Fetch fresh data
+        let allSongs: Song[] = [];
+        const MAX_SONGS = 500;
+
+        for (let i = 0; i < queries.length; i++) {
+          if (allSongs.length >= MAX_SONGS) break;
+
+          const results = await searchSongs(queries[i], 0, 20);
+
+          if (results.length > 0) {
+            const existingIds = new Set(allSongs.map(s => s.id));
+            const newSongs = results.filter(song => !existingIds.has(song.id));
+            allSongs = [...allSongs, ...newSongs].slice(0, MAX_SONGS);
+
+            setSongs(allSongs);
+          }
+        }
+
+        // Cache the results
+        await AsyncStorage.setItem('cached_songs', JSON.stringify(allSongs));
+        await AsyncStorage.setItem('cached_songs_timestamp', Date.now().toString());
+      } catch (error) {
+        console.error('Error fetching songs:', error);
+      }
     };
 
     fetchAllSongs();
@@ -88,34 +168,53 @@ const SongsScreen = () => {
     { label: 'Z to A', value: 'desc' as const },
   ];
 
-  const handleFilterSelect = (filterValue: 'popular' | 'artist' | 'album' | 'year' | 'asc' | 'desc') => {
-    setFilter(filterValue);
-    setShowFilterMenu(false);
-  };
-
-  const handleMenuPress = (song: Song) => {
+  const handleMenuPress = useCallback((song: Song) => {
     setSelectedSong(song);
     setShowMenu(true);
-  };
+  }, []);
 
-  const handlePlaySong = async (song: Song) => {
+  const handlePlaySong = useCallback(async (song: Song) => {
     try {
-      // Set the queue with all songs starting from the selected one
-      const selectedIndex = filteredSongs.findIndex((s: Song) => s.id === song.id);
+      // Set the entire filtered songs list as the queue
       setQueue(filteredSongs);
-      setCurrentTrackIndex(selectedIndex);
+      
+      // Find the index of the clicked song in filteredSongs
+      const songIndex = filteredSongs.findIndex(s => s.id === song.id);
+      
+      if (songIndex === -1) {
+        console.error('Song not found in filtered songs');
+        return;
+      }
+      
+      setCurrentTrackIndex(songIndex);
+      await loadTrack(song);
+      await playTrack();
+      setIsPlaying(true);
       setShowMiniPlayer(true);
       setShowExpandedPlayer(true);
-      
-      // Load and play the track in background
-      loadTrack(song).then(() => {
-        playTrack();
-        setIsPlaying(true);
-      });
     } catch (error) {
       console.error('Error playing song:', error);
     }
-  };
+  }, [filteredSongs, setQueue, setCurrentTrackIndex, setIsPlaying, setShowMiniPlayer, setShowExpandedPlayer]);
+
+  const handlePlayPauseToggle = useCallback(async (song: Song) => {
+    if (currentTrackIndex !== null && queue[currentTrackIndex]?.id === song.id) {
+      if (isPlaying) {
+        await pauseTrack();
+        setIsPlaying(false);
+      } else {
+        await resumeTrack();
+        setIsPlaying(true);
+      }
+    } else {
+      handlePlaySong(song);
+    }
+  }, [currentTrackIndex, queue, isPlaying, setIsPlaying, handlePlaySong]);
+
+  const handleFilterSelect = useCallback((filterValue: 'popular' | 'artist' | 'album' | 'year' | 'asc' | 'desc') => {
+    setFilter(filterValue);
+    setShowFilterMenu(false);
+  }, []);
 
   const menuOptions = [
     { label: 'Play Next', icon: 'play-skip-forward' },
@@ -215,59 +314,21 @@ const SongsScreen = () => {
     </Modal>
   );
 
-  const renderSongItem = ({ item }: { item: Song }) => {
+  const renderSongItem = useCallback(({ item }: { item: Song }) => {
     const isCurrentSong = currentTrackIndex !== null && queue[currentTrackIndex]?.id === item.id;
-    const isThisSongPlaying = isCurrentSong && isPlaying;
-
-    const handlePlayPauseToggle = async () => {
-      if (isCurrentSong) {
-        // If this song is already loaded, just toggle play/pause
-        if (isPlaying) {
-          await pauseTrack();
-          setIsPlaying(false);
-        } else {
-          await resumeTrack();
-          setIsPlaying(true);
-        }
-      } else {
-        // Load and play new song
-        handlePlaySong(item);
-      }
-    };
 
     return (
-      <TouchableOpacity 
-        style={styles.songItem}
-        onPress={() => handlePlaySong(item)}
-        activeOpacity={0.7}
-      >
-        <Image
-          source={{ uri: item.image?.[2]?.url || item.image?.[0]?.url || 'https://via.placeholder.com/60' }}
-          style={styles.thumbnail}
-        />
-        <View style={styles.songInfo}>
-          <Text style={[styles.songName, { color: colors.text }]} numberOfLines={1}>
-            {item.name}
-          </Text>
-          <Text style={[styles.artistInfo, { color: colors.subText }]} numberOfLines={1}>
-            {item.artists?.primary?.[0]?.name || 'Unknown Artist'} | {Math.floor(item.duration / 60)}:{(item.duration % 60).toString().padStart(2, '0')}
-          </Text>
-        </View>
-        <TouchableOpacity 
-          style={[styles.playButton, { backgroundColor: colors.primary }]}
-          onPress={handlePlayPauseToggle}
-        >
-          <Ionicons name={isThisSongPlaying ? "pause" : "play"} size={18} color="#fff" />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.menuButton}
-          onPress={() => handleMenuPress(item)}
-        >
-          <Ionicons name="ellipsis-vertical" size={20} color={colors.text} />
-        </TouchableOpacity>
-      </TouchableOpacity>
+      <SongItem
+        item={item}
+        isCurrentSong={isCurrentSong}
+        isPlaying={isPlaying}
+        onPlayPause={handlePlayPauseToggle}
+        onPress={handlePlaySong}
+        onMenu={handleMenuPress}
+        colors={colors}
+      />
     );
-  };
+  }, [currentTrackIndex, queue, isPlaying, handlePlayPauseToggle, handlePlaySong, handleMenuPress, colors]);
 
   const renderFilterHeader = () => (
     <View style={[styles.headerContainer, { backgroundColor: colors.background, borderBottomColor: colors.primary + '20' }]}>
@@ -338,6 +399,16 @@ const SongsScreen = () => {
               <Text style={[styles.emptyText, { color: colors.text }]}>Loading songs...</Text>
             </View>
           }
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={10}
+          windowSize={10}
+          initialNumToRender={15}
+          updateCellsBatchingPeriod={50}
+          getItemLayout={(data, index) => ({
+            length: 70,
+            offset: 70 * index,
+            index,
+          })}
         />
         {renderMenuModal()}
         {renderFilterModal()}
