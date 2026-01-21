@@ -1,4 +1,4 @@
-import { Song } from '../types';
+import { Song, Artist, Album } from '../types';
 
 const BASE_URL = 'https://saavn.sumit.co/api';
 
@@ -28,6 +28,56 @@ export const searchSongs = async (query: string, page: number = 0, limit: number
     return [];
   } catch (error) {
     console.error('Search Songs Error:', error);
+    return [];
+  }
+};
+
+export const searchAlbums = async (query: string, page: number = 0, limit: number = 10): Promise<any[]> => {
+  try {
+    const url = `${BASE_URL}/search/albums?query=${encodeURIComponent(query)}&page=${page}&limit=${limit}`;
+    
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      console.error('API Error:', response.status, response.statusText);
+      return [];
+    }
+    
+    const json = await response.json();
+    const results = json.data?.results;
+    
+    if (results && Array.isArray(results) && results.length > 0) {
+      return results;
+    }
+    
+    return [];
+  } catch (error) {
+    console.error('Search Albums Error:', error);
+    return [];
+  }
+};
+
+export const searchArtists = async (query: string, page: number = 0, limit: number = 10): Promise<any[]> => {
+  try {
+    const url = `${BASE_URL}/search/artists?query=${encodeURIComponent(query)}&page=${page}&limit=${limit}`;
+    
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      console.error('API Error:', response.status, response.statusText);
+      return [];
+    }
+    
+    const json = await response.json();
+    const results = json.data?.results;
+    
+    if (results && Array.isArray(results) && results.length > 0) {
+      return results;
+    }
+    
+    return [];
+  } catch (error) {
+    console.error('Search Artists Error:', error);
     return [];
   }
 };
