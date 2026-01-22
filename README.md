@@ -19,7 +19,7 @@ npm run ios            # Build for iOS
 
 ### Build & Download
 
-**Expo Build Link**: [Music Player App - Latest Build](https://expo.dev/accounts/aroult/projects/MusicPlayerApp/builds/472b96a6-ccea-4b4f-b246-03d21375cf82)
+**Expo Build Link**: [Music Player App - Latest Build](https://expo.dev/accounts/aroult/projects/MusicPlayerApp/builds/5dd3ec3f-8b2f-4ea3-ab81-448e9e2b7887)
 
 ## Tech Stack
 
