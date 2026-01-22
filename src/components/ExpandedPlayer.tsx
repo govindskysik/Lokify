@@ -44,6 +44,8 @@ const ExpandedPlayer = ({ isExpanded, onCollapse }: ExpandedPlayerProps) => {
     isShuffle,
     setIsShuffle,
     shuffleQueue,
+    removeFromQueue,
+    reorderQueue,
     downloadedSongs,
     downloadProgress,
     setDownloadProgress,
@@ -61,6 +63,7 @@ const ExpandedPlayer = ({ isExpanded, onCollapse }: ExpandedPlayerProps) => {
   const [loadingLyrics, setLoadingLyrics] = useState(false);
   const [showQueueModal, setShowQueueModal] = useState(false);
   const [showMenuModal, setShowMenuModal] = useState(false);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const updateInterval = useRef<NodeJS.Timeout | null>(null);
   const slideAnim = useRef(new Animated.Value(screenHeight)).current;
   const panResponder = useRef(
@@ -329,6 +332,22 @@ const ExpandedPlayer = ({ isExpanded, onCollapse }: ExpandedPlayerProps) => {
     setShowQueueModal(true);
   };
 
+  const handleRemoveFromQueue = (index: number) => {
+    removeFromQueue(index);
+  };
+
+  const handleMoveUp = (index: number) => {
+    if (index > 0) {
+      reorderQueue(index, index - 1);
+    }
+  };
+
+  const handleMoveDown = (index: number) => {
+    if (index < queue.length - 1) {
+      reorderQueue(index, index + 1);
+    }
+  };
+
   const handleLoadLyrics = async () => {
     if (!currentTrack) return;
     setLoadingLyrics(true);
@@ -579,7 +598,7 @@ const ExpandedPlayer = ({ isExpanded, onCollapse }: ExpandedPlayerProps) => {
                 contentContainerStyle={styles.queueScrollContent}
               >
                 {(queue && queue.length ? queue : currentTrack ? [currentTrack] : []).map((song, index) => (
-                  <TouchableOpacity
+                  <View
                     key={song.id + index}
                     style={[
                       styles.queueItem,
@@ -589,28 +608,56 @@ const ExpandedPlayer = ({ isExpanded, onCollapse }: ExpandedPlayerProps) => {
                         borderLeftColor: colors.primary,
                       },
                     ]}
-                    activeOpacity={0.7}
-                    onPress={() => {
-                      handleSelectQueueItem(index);
-                      setShowQueueModal(false);
-                    }}
                   >
-                    <Image
-                      source={{ uri: song.image?.[1]?.url || song.image?.[0]?.url || 'https://via.placeholder.com/60' }}
-                      style={styles.queueItemImage}
-                    />
-                    <View style={styles.queueItemInfo}>
-                      <Text style={[styles.queueItemTitle, { color: colors.text }]} numberOfLines={1}>
-                        {song.name}
-                      </Text>
-                      <Text style={[styles.queueItemArtist, { color: colors.subText }]} numberOfLines={1}>
-                        {song.artists?.primary?.[0]?.name || 'Unknown Artist'}
-                      </Text>
+                    <TouchableOpacity
+                      style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
+                      onPress={() => {
+                        handleSelectQueueItem(index);
+                        setShowQueueModal(false);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Image
+                        source={{ uri: song.image?.[1]?.url || song.image?.[0]?.url || 'https://via.placeholder.com/60' }}
+                        style={styles.queueItemImage}
+                      />
+                      <View style={styles.queueItemInfo}>
+                        <Text style={[styles.queueItemTitle, { color: colors.text }]} numberOfLines={1}>
+                          {song.name}
+                        </Text>
+                        <Text style={[styles.queueItemArtist, { color: colors.subText }]} numberOfLines={1}>
+                          {song.artists?.primary?.[0]?.name || 'Unknown Artist'}
+                        </Text>
+                      </View>
+                      {index === currentTrackIndex && (
+                        <Ionicons name="volume-high" size={20} color={colors.primary} style={{ marginRight: 8 }} />
+                      )}
+                    </TouchableOpacity>
+
+                    {/* Reorder and Remove Controls */}
+                    <View style={styles.queueItemControls}>
+                      <TouchableOpacity
+                        onPress={() => handleMoveUp(index)}
+                        disabled={index === 0}
+                        style={[styles.queueControlButton, { opacity: index === 0 ? 0.3 : 1 }]}
+                      >
+                        <Ionicons name="chevron-up" size={18} color={colors.primary} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleMoveDown(index)}
+                        disabled={index === queue.length - 1}
+                        style={[styles.queueControlButton, { opacity: index === queue.length - 1 ? 0.3 : 1 }]}
+                      >
+                        <Ionicons name="chevron-down" size={18} color={colors.primary} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleRemoveFromQueue(index)}
+                        style={styles.queueControlButton}
+                      >
+                        <Ionicons name="close-circle" size={18} color={colors.error} />
+                      </TouchableOpacity>
                     </View>
-                    {index === currentTrackIndex && (
-                      <Ionicons name="volume-high" size={20} color={colors.primary} />
-                    )}
-                  </TouchableOpacity>
+                  </View>
                 ))}
 
                 {(queue.length === 0 && !currentTrack) && (
@@ -925,6 +972,15 @@ const styles = StyleSheet.create({
   },
   queueItemArtist: {
     fontSize: 13,
+  },
+  queueItemControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingLeft: 8,
+  },
+  queueControlButton: {
+    padding: 6,
   },
   emptyQueueContainer: {
     alignItems: 'center',

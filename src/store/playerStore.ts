@@ -9,6 +9,8 @@ interface PlayerStore {
   setQueue: (queue: Song[]) => void;
   addToQueue: (song: Song) => void;
   addToQueueNext: (song: Song) => void;
+  removeFromQueue: (index: number) => void;
+  reorderQueue: (fromIndex: number, toIndex: number) => void;
   clearQueue: () => void;
 
   // Shuffle
@@ -83,7 +85,55 @@ export const usePlayerStore = create<PlayerStore>((set) => ({
     }),
   clearQueue: () => set({ queue: [] }),
 
-  isShuffle: false,
+  removeFromQueue: (index) =>
+    set((state) => {
+      const newQueue = [...state.queue];
+      const removedSong = newQueue[index];
+      newQueue.splice(index, 1);
+
+      // Adjust current track index if necessary
+      let newIndex = state.currentTrackIndex;
+      if (newIndex === index) {
+        // If removing current track, move to next
+        if (index < newQueue.length) {
+          newIndex = index;
+        } else if (index > 0) {
+          newIndex = index - 1;
+        } else {
+          newIndex = null;
+        }
+      } else if (newIndex !== null && index < newIndex) {
+        // If removing before current track, decrement index
+        newIndex = newIndex - 1;
+      }
+
+      console.log('Removed from queue:', removedSong.name, 'at index', index);
+      return { queue: newQueue, currentTrackIndex: newIndex };
+    }),
+
+  reorderQueue: (fromIndex, toIndex) =>
+    set((state) => {
+      if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0 || fromIndex >= state.queue.length || toIndex >= state.queue.length) {
+        return state;
+      }
+
+      const newQueue = [...state.queue];
+      const [movedSong] = newQueue.splice(fromIndex, 1);
+      newQueue.splice(toIndex, 0, movedSong);
+
+      // Update current track index based on moves
+      let newIndex = state.currentTrackIndex;
+      if (state.currentTrackIndex === fromIndex) {
+        newIndex = toIndex;
+      } else if (fromIndex < state.currentTrackIndex && toIndex >= state.currentTrackIndex && state.currentTrackIndex !== null) {
+        newIndex = state.currentTrackIndex - 1;
+      } else if (fromIndex > state.currentTrackIndex && toIndex <= state.currentTrackIndex && state.currentTrackIndex !== null) {
+        newIndex = state.currentTrackIndex + 1;
+      }
+
+      console.log('Reordered queue: moved from', fromIndex, 'to', toIndex);
+      return { queue: newQueue, currentTrackIndex: newIndex };
+    }),
   setIsShuffle: (shuffle) => set({ isShuffle: shuffle }),
   shuffleQueue: () =>
     set((state) => {
